@@ -19,7 +19,7 @@ void p(char *fmt, ... ){
   #define DPRINT(x)  Serial.println (x)
   #define DPRINTBIN(x) Serial.println (x, BIN);
   #define DPRINTF(fmt, ...) p(fmt, __VA_ARGS__);
-  #define DSLEEP(x) delay(x); 
+  #define DSLEEP(x) delay(x);
 #else
   #define DPRINT(x)
   #define DPRINTBIN(x)
@@ -27,8 +27,11 @@ void p(char *fmt, ... ){
   #define DSLEEP(x)
 #endif
 
-// Build a keyimap and stateimap
-char keymap[20] = {
+#define BUTTONS     20
+#define THRESHOLD   100
+
+// Build a keymap and statemap
+char keymap[BUTTONS] = {
   '/',                    // D0 - Player 2 Start Button
   '.',                    // D1 - Player 2 Orange Button
   'm',                    // D2 - Player 2 Blue Button
@@ -51,19 +54,18 @@ char keymap[20] = {
   's'                     // A5 - Player 1 Down
 };
 
-char *iomap[20] = {
+int keystate[BUTTONS] = {
+  LOW, LOW, LOW, LOW, LOW, LOW, LOW, LOW, LOW, LOW, LOW, LOW, LOW, LOW, LOW, LOW, LOW, LOW, LOW, LOW
+};
+
+// Debounce the buttons
+char debounce[BUTTONS];
+
+// Only used for working out where you plugged what wires.
+char *iomap[BUTTONS] = {
   "D0", "D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8", "D9", "D10", "D11", "D12", "D13", "A0", "A1", "A2", "A3", "A4", "A5"
 };
 
-int keystate[20] = {
-    LOW, LOW, LOW, LOW, LOW, LOW, LOW, LOW, LOW, LOW, LOW, LOW, LOW, LOW, LOW, LOW, LOW, LOW, LOW, LOW
-};
-
-uint8_t b_prev = 0;
-uint8_t c_prev = 0;
-uint8_t d_prev = 0;
-uint8_t e_prev = 0;
-uint8_t f_prev = 0;
 
 void setup() {
   // All the pins are input
@@ -78,6 +80,11 @@ void setup() {
   PORTC = 0x00;
   PORTB = 0x00;
 
+  // Initialize the debounce array
+  for (byte i = 0; i < BUTTONS; i++) {
+    debounce[i] == 0;
+  }
+
 #ifndef NOKB
   // initialize control over the keyboard:
   Keyboard.begin();
@@ -87,66 +94,69 @@ void setup() {
 void set_key(int key, int state) {
   state = state > 0;
   if (state == HIGH && keystate[key] == LOW) {
-    DPRINTF("KEY %d (%s) GOT PRESSED\r\n", key, iomap[key]);
+    if (debounce[key] < THRESHOLD) {
+      debounce[key] += 1;
+    }
+    else if (debounce[key] >= THRESHOLD) {
+      DPRINTF("KEY %d (%s) GOT PRESSED\r\n", key, iomap[key]);
 #ifndef NOKB
-    Keyboard.press(keymap[key]);
+      Keyboard.press(keymap[key]);
 #endif
-    keystate[key] = state;
+      keystate[key] = state;
+    }
   }
   else if (state == LOW && keystate[key] == HIGH) {
-    DPRINTF("KEY %d (%s) GOT RELEASED\r\n", key, iomap[key]);
+    if (debounce[key] > 0) {
+      debounce[key] -= 1;
+    }
+    else if (debounce[key] == 0) {
+      DPRINTF("KEY %d (%s) GOT RELEASED\r\n", key, iomap[key]);
 #ifndef NOKB
-    Keyboard.release(keymap[key]);
+      Keyboard.release(keymap[key]);
 #endif
-    keystate[key] = state;
+      keystate[key] = state;
+    }
+  }
+  else if (state == keystate[key]) {
+    debounce[key] = state ? THRESHOLD : 0;
   }
 }
-    
+
 void loop() {
   uint8_t b = PINB;
   uint8_t c = PINC;
   uint8_t d = PIND;
   uint8_t e = PINE;
   uint8_t f = PINF;
-  
-  if (b != b_prev || c != c_prev || d != d_prev || e != e_prev || f != f_prev) {
-    DPRINT("Input has changed");
-    DPRINTF("b %d, c %d, d %d, e %d, f %d\r\n", b != b_prev, c != c_prev, d != d_prev, e != e_prev, f != f_prev);
 
-    set_key(0, d & 0x04);
-    set_key(1, d & 0x08);    
-    set_key(2, d & 0x02);    
-    set_key(3, d & 0x01);    
-    set_key(4, d & 0x10);
-    set_key(5, c & 0x40);
-    set_key(6, d & 0x80);
-    set_key(7, e & 0x40);
+  set_key(0, d & 0x04);
+  set_key(1, d & 0x08);
+  set_key(2, d & 0x02);
+  set_key(3, d & 0x01);
+  set_key(4, d & 0x10);
+  set_key(5, c & 0x40);
+  set_key(6, d & 0x80);
+  set_key(7, e & 0x40);
 
-    set_key(8, b & 0x10);
-    set_key(9, b & 0x20);
-    set_key(10, b & 0x40);
-    set_key(11, b & 0x80);
-    set_key(12, d & 0x40);
-    set_key(13, c & 0x80);
+  set_key(8, b & 0x10);
+  set_key(9, b & 0x20);
+  set_key(10, b & 0x40);
+  set_key(11, b & 0x80);
+  set_key(12, d & 0x40);
+  set_key(13, c & 0x80);
 
-    set_key(14, f & 0x80);
-    set_key(15, f & 0x40);
-    set_key(16, f & 0x20);
-    set_key(17, f & 0x10);
-    set_key(18, f & 0x02);
-    set_key(19, f & 0x01);
+  set_key(14, f & 0x80);
+  set_key(15, f & 0x40);
+  set_key(16, f & 0x20);
+  set_key(17, f & 0x10);
+  set_key(18, f & 0x02);
+  set_key(19, f & 0x01);
 
 #ifdef DEBUG
-    if (e != e_prev) {
-      DPRINTBIN(e);
-    }
-#endif
-
-    b_prev = PINB;
-    c_prev = PINC;
-    d_prev = PIND;
-    e_prev = PINE;
-    f_prev = PINF;
+  if (e != e_prev) {
+    DPRINTBIN(e);
   }
+#endif
 }
+
 
